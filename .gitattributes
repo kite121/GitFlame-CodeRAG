@@ -1,0 +1,4 @@
+# Synthetic Sprint 1 evaluation dataset: keep it in the repo, but exclude it
+# from GitHub language statistics and collapse it in diffs/PRs.
+datasets/repositories/** linguist-generated=true
+datasets/repositories/** linguist-vendored=true
