@@ -37,6 +37,9 @@ CREATE TABLE IF NOT EXISTS issues (
 
 CREATE TABLE IF NOT EXISTS code_chunks (
     id TEXT PRIMARY KEY,
+    parent_chunk_id TEXT,
+    split_index INTEGER CHECK (split_index IS NULL OR split_index > 0),
+    split_count INTEGER CHECK (split_count IS NULL OR split_count > 0),
     repository_id TEXT NOT NULL REFERENCES repositories(id) ON DELETE CASCADE,
     file_id TEXT NOT NULL REFERENCES repository_files(id) ON DELETE CASCADE,
     path TEXT NOT NULL,
@@ -49,7 +52,20 @@ CREATE TABLE IF NOT EXISTS code_chunks (
     end_line INTEGER NOT NULL CHECK (end_line >= start_line),
     content TEXT NOT NULL,
     content_hash TEXT NOT NULL,
-    token_count INTEGER NOT NULL DEFAULT 0 CHECK (token_count >= 0)
+    token_count INTEGER NOT NULL DEFAULT 0 CHECK (token_count >= 0),
+    CHECK (
+        (
+            parent_chunk_id IS NULL
+            AND split_index IS NULL
+            AND split_count IS NULL
+        )
+        OR (
+            parent_chunk_id IS NOT NULL
+            AND split_index IS NOT NULL
+            AND split_count IS NOT NULL
+            AND split_index <= split_count
+        )
+    )
 );
 
 CREATE TABLE IF NOT EXISTS chunk_structural_metadata (
@@ -111,6 +127,7 @@ CREATE INDEX IF NOT EXISTS idx_repository_files_repo_revision
     ON repository_files(repository_id, revision);
 CREATE INDEX IF NOT EXISTS idx_code_chunks_repo_path
     ON code_chunks(repository_id, path);
+CREATE INDEX IF NOT EXISTS idx_code_chunks_parent
+    ON code_chunks(parent_chunk_id);
 CREATE INDEX IF NOT EXISTS idx_retrieval_results_run_rank
     ON retrieval_results(retrieval_run_id, rank);
-

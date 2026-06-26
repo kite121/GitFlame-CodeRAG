@@ -77,6 +77,8 @@ load_chunks_for_repository(repository_id: str, revision: str) -> list[CodeChunk]
 - Paths are repository-relative and use `/` separators.
 - `start_line` and `end_line` are 1-based and inclusive.
 - Every chunk belongs to exactly one file and repository revision.
+- Split chunks use `parent_chunk_id` to point to the original large chunk id and
+  `split_index` / `split_count` to preserve part order.
 - Search texts and embeddings reference an existing `chunk_id`.
 - Retrieval results always state their source and rank.
 - `expected_chunks` is not required in Sprint 1.
