@@ -1,0 +1,69 @@
+version: 1
+
+repository:
+  name: nestjs-payments
+  default_branch: main
+  language_priority:
+    - typescript
+
+analysis:
+  enabled: true
+  include:
+    - "src/**"
+    - "test/**"
+  exclude:
+    - "node_modules/**"
+    - "dist/**"
+    - "build/**"
+    - "target/**"
+    - ".git/**"
+    - "vendor/**"
+    - "__pycache__/**"
+    - "*.lock"
+
+issues:
+  source: synthetic
+  format: github_issue
+  fields:
+    - title
+    - body
+    - labels
+    - expected_files
+
+chunking:
+  strategy: ast_aware
+  fallback_strategy: fixed_window
+  max_chunk_lines: 80
+  overlap_lines: 10
+  include_metadata: true
+
+ast_grep:
+  enabled: true
+  extract_symbols: true
+  extract_imports: true
+  extract_handlers: true
+  extract_tests: true
+
+retrieval:
+  top_k: 10
+  use_bm25: true
+  use_dense: true
+  use_ast_candidates: true
+  fusion_method: rrf
+
+embeddings:
+  model: server_controlled
+  normalize_vectors: true
+  batch_size: 32
+
+storage:
+  store_chunks: true
+  store_embeddings: true
+  store_retrieval_runs: true
+
+evaluation:
+  metrics:
+    - precision_at_k
+    - recall_at_k
+    - mrr
+    - ndcg_at_k

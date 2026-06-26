@@ -55,6 +55,7 @@ class ChunkingConfig(ContractModel):
     fallback_strategy: str = "fixed_window"
     max_chunk_lines: int = Field(default=80, ge=1)
     overlap_lines: int = Field(default=10, ge=0)
+    include_metadata: bool = True
 
 
 class RetrievalConfig(ContractModel):
