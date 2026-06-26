@@ -13,6 +13,7 @@ dependencies = [
     "rank-bm25>=0.2.2",
     "sentence-transformers>=3.0",
     "sqlalchemy>=2.0",
+    "transformers>=4.45,<4.46",
 ]
 
 [dependency-groups]
@@ -39,4 +40,3 @@ target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
-
