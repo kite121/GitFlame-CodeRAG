@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import re
+from hashlib import sha1
 from typing import Any
 
 from sqlalchemy import Engine, text
@@ -14,6 +16,7 @@ from gitflame_coderag.schemas import (
     FileMetadata,
     Repository,
     RepositoryFile,
+    RetrievalResult,
     StructuralMetadata,
 )
 
@@ -272,8 +275,7 @@ class CodeRAGRepository:
                         :embedding,
                         :created_at
                     )
-                    ON CONFLICT (chunk_id) DO UPDATE SET
-                        embedding_model = EXCLUDED.embedding_model,
+                    ON CONFLICT (chunk_id, embedding_model) DO UPDATE SET
                         embedding = EXCLUDED.embedding,
                         created_at = EXCLUDED.created_at
                     """
@@ -285,6 +287,142 @@ class CodeRAGRepository:
                     "created_at": embedding.created_at,
                 },
             )
+
+    def save_chunk_embedding(self, embedding: ChunkEmbedding) -> None:
+        self.save_embedding_vector(embedding)
+
+    def load_chunk_embeddings(
+        self,
+        *,
+        repository_id: str | None = None,
+        revision: str | None = None,
+        embedding_model: str | None = None,
+    ) -> list[ChunkEmbedding]:
+        with self.engine.connect() as connection:
+            rows = connection.execute(
+                text(
+                    """
+                    SELECT
+                        e.chunk_id,
+                        e.embedding_model,
+                        e.embedding,
+                        e.created_at
+                    FROM chunk_embeddings AS e
+                    INNER JOIN code_chunks AS c ON c.id = e.chunk_id
+                    INNER JOIN repository_files AS f ON f.id = c.file_id
+                    WHERE (:repository_id IS NULL OR c.repository_id = :repository_id)
+                      AND (:revision IS NULL OR f.revision = :revision)
+                      AND (:embedding_model IS NULL OR e.embedding_model = :embedding_model)
+                    ORDER BY e.chunk_id, e.embedding_model
+                    """
+                ),
+                {
+                    "repository_id": repository_id,
+                    "revision": revision,
+                    "embedding_model": embedding_model,
+                },
+            ).mappings()
+
+            return [_row_to_chunk_embedding(row) for row in rows]
+
+    def create_vector_index(
+        self,
+        *,
+        embedding_model: str,
+        dimensions: int,
+        method: str = "hnsw",
+        distance: str = "cosine",
+        lists: int = 100,
+        m: int = 16,
+        ef_construction: int = 64,
+    ) -> str:
+        if dimensions <= 0:
+            raise ValueError("vector index dimensions must be positive")
+        if method not in {"hnsw", "ivfflat"}:
+            raise ValueError("vector index method must be 'hnsw' or 'ivfflat'")
+        opclass = {
+            "cosine": "vector_cosine_ops",
+            "l2": "vector_l2_ops",
+            "ip": "vector_ip_ops",
+        }.get(distance)
+        if opclass is None:
+            raise ValueError("vector index distance must be 'cosine', 'l2', or 'ip'")
+        if lists <= 0 or m <= 0 or ef_construction <= 0:
+            raise ValueError("vector index tuning parameters must be positive")
+
+        index_name = _vector_index_name(embedding_model, dimensions, method, distance)
+        with_clause = (
+            f"WITH (lists = {lists})"
+            if method == "ivfflat"
+            else f"WITH (m = {m}, ef_construction = {ef_construction})"
+        )
+        model_literal = _quote_sql_literal(embedding_model)
+        query = f"""
+            CREATE INDEX IF NOT EXISTS {index_name}
+            ON chunk_embeddings
+            USING {method} ((embedding::vector({dimensions})) {opclass})
+            {with_clause}
+            WHERE embedding_model = {model_literal}
+        """
+        with self.engine.begin() as connection:
+            connection.execute(text(query))
+        return index_name
+
+    def search_similar_chunks(
+        self,
+        query_vector: list[float],
+        *,
+        embedding_model: str,
+        top_k: int,
+        repository_id: str | None = None,
+        revision: str | None = None,
+    ) -> list[RetrievalResult]:
+        if top_k <= 0 or not query_vector:
+            return []
+
+        vector = [float(value) for value in query_vector]
+        dimensions = len(vector)
+        query = f"""
+            SELECT
+                e.chunk_id,
+                1.0 - (
+                    (e.embedding::vector({dimensions}))
+                    <=> CAST(:query_vector AS vector({dimensions}))
+                ) AS score
+            FROM chunk_embeddings AS e
+            INNER JOIN code_chunks AS c ON c.id = e.chunk_id
+            INNER JOIN repository_files AS f ON f.id = c.file_id
+            WHERE e.embedding_model = :embedding_model
+              AND (:repository_id IS NULL OR c.repository_id = :repository_id)
+              AND (:revision IS NULL OR f.revision = :revision)
+            ORDER BY
+                (e.embedding::vector({dimensions}))
+                    <=> CAST(:query_vector AS vector({dimensions})),
+                e.chunk_id
+            LIMIT :top_k
+        """
+        with self.engine.connect() as connection:
+            rows = connection.execute(
+                text(query),
+                {
+                    "query_vector": vector,
+                    "embedding_model": embedding_model,
+                    "repository_id": repository_id,
+                    "revision": revision,
+                    "top_k": top_k,
+                },
+            ).mappings()
+
+            return [
+                RetrievalResult(
+                    chunk_id=row["chunk_id"],
+                    rank=rank,
+                    score=float(row["score"]),
+                    dense_score=float(row["score"]),
+                    source="dense",
+                )
+                for rank, row in enumerate(rows, start=1)
+            ]
 
     def save_keywords(self, keywords: ChunkKeywords) -> None:
         with self.engine.begin() as connection:
@@ -375,3 +513,39 @@ def _row_to_code_chunk(row: Any) -> CodeChunk:
         content_hash=row["content_hash"],
         token_count=row["token_count"],
     )
+
+
+def _row_to_chunk_embedding(row: Any) -> ChunkEmbedding:
+    return ChunkEmbedding(
+        chunk_id=row["chunk_id"],
+        embedding_model=row["embedding_model"],
+        vector=_coerce_vector(row["embedding"]),
+        created_at=row["created_at"],
+    )
+
+
+def _coerce_vector(value: Any) -> list[float]:
+    if hasattr(value, "tolist"):
+        value = value.tolist()
+    if isinstance(value, str):
+        stripped = value.strip("[]")
+        if not stripped:
+            return []
+        return [float(part.strip()) for part in stripped.split(",")]
+    return [float(part) for part in value]
+
+
+def _vector_index_name(
+    embedding_model: str,
+    dimensions: int,
+    method: str,
+    distance: str,
+) -> str:
+    slug = re.sub(r"[^0-9A-Za-z]+", "_", embedding_model).strip("_").lower()
+    slug = slug[:24] or "model"
+    digest = sha1(embedding_model.encode("utf-8")).hexdigest()[:10]
+    return f"idx_chunk_embeddings_{slug}_{dimensions}_{method}_{distance}_{digest}"[:63]
+
+
+def _quote_sql_literal(value: str) -> str:
+    return "'" + value.replace("'", "''") + "'"

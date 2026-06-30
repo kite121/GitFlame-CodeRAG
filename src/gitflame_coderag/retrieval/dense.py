@@ -1,8 +1,25 @@
 """Dense retrieval interfaces owned by the embeddings workstream."""
 
+from __future__ import annotations
+
+from typing import Protocol
+
 import numpy as np
 
+from gitflame_coderag.embeddings import DEFAULT_EMBEDDING_MODEL, embed_query
 from gitflame_coderag.schemas import ChunkEmbedding, RetrievalResult
+
+
+class DenseVectorStore(Protocol):
+    def search_similar_chunks(
+        self,
+        query_vector: list[float],
+        *,
+        embedding_model: str,
+        top_k: int,
+        repository_id: str | None = None,
+        revision: str | None = None,
+    ) -> list[RetrievalResult]: ...
 
 
 def cosine_similarity(vector_a: list[float], vector_b: list[float]) -> float:
@@ -38,6 +55,28 @@ def dense_search(
         )
         for rank, (chunk_id, score) in enumerate(ranked, start=1)
     ]
+
+
+def dense_retrieval_pgvector(
+    query: str,
+    vector_store: DenseVectorStore,
+    top_k: int,
+    *,
+    embedding_model: str = DEFAULT_EMBEDDING_MODEL,
+    repository_id: str | None = None,
+    revision: str | None = None,
+) -> list[RetrievalResult]:
+    if top_k <= 0 or not query.strip():
+        return []
+
+    query_vector = embed_query(query, model_name=embedding_model)
+    return vector_store.search_similar_chunks(
+        query_vector,
+        embedding_model=embedding_model,
+        top_k=top_k,
+        repository_id=repository_id,
+        revision=revision,
+    )
 
 
 def rank_dense_results(results: list[RetrievalResult]) -> list[RetrievalResult]:

@@ -1,6 +1,7 @@
 from gitflame_coderag.embeddings import service
 from gitflame_coderag.embeddings.service import (
     DEFAULT_EMBEDDING_MODEL,
+    LIGHTWEIGHT_BASELINE_MODEL,
     build_embedding_text,
     embed_chunks,
     embed_query,
@@ -66,13 +67,21 @@ def test_extract_keywords_from_chunk_splits_identifiers_comments_strings_and_pat
 
 
 def test_embed_query_uses_embedding_adapter(monkeypatch) -> None:
-    monkeypatch.setattr(service, "_embed_texts", lambda texts: [[0.1, 0.2, 0.3]])
+    def fake_embed_texts(texts: list[str], **kwargs: object) -> list[list[float]]:
+        assert texts == ["recommendations disappear after refresh"]
+        assert kwargs["model_name"] == LIGHTWEIGHT_BASELINE_MODEL
+        return [[0.1, 0.2, 0.3]]
 
-    assert embed_query("recommendations disappear after refresh") == [0.1, 0.2, 0.3]
+    monkeypatch.setattr(service, "_embed_texts", fake_embed_texts)
+
+    assert embed_query(
+        "recommendations disappear after refresh",
+        model_name=LIGHTWEIGHT_BASELINE_MODEL,
+    ) == [0.1, 0.2, 0.3]
 
 
 def test_embed_chunks_returns_schema_embeddings(monkeypatch) -> None:
-    monkeypatch.setattr(service, "_embed_texts", lambda texts: [[1.0, 0.0]])
+    monkeypatch.setattr(service, "_embed_texts", lambda texts, **kwargs: [[1.0, 0.0]])
 
     embeddings = embed_chunks([make_chunk()])
 

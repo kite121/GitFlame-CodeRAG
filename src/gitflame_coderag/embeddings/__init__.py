@@ -1,5 +1,6 @@
 from gitflame_coderag.embeddings.service import (
     DEFAULT_EMBEDDING_MODEL,
+    LIGHTWEIGHT_BASELINE_MODEL,
     build_embedding_text,
     embed_chunks,
     embed_query,
@@ -9,6 +10,7 @@ from gitflame_coderag.embeddings.service import (
 
 __all__ = [
     "DEFAULT_EMBEDDING_MODEL",
+    "LIGHTWEIGHT_BASELINE_MODEL",
     "build_embedding_text",
     "embed_chunks",
     "embed_query",

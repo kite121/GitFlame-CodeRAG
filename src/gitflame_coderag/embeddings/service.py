@@ -13,6 +13,7 @@ from gitflame_coderag.schemas import (
 )
 
 DEFAULT_EMBEDDING_MODEL = "jinaai/jina-embeddings-v2-base-code"
+LIGHTWEIGHT_BASELINE_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 
 _IDENTIFIER_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 _STRING_RE = re.compile(
@@ -176,40 +177,81 @@ def extract_keywords_from_chunk(chunk: CodeChunk) -> ChunkKeywords:
     )
 
 
-def embed_text(text: str) -> list[float]:
-    return _embed_texts([text])[0]
+def embed_text(
+    text: str,
+    *,
+    model_name: str = DEFAULT_EMBEDDING_MODEL,
+    batch_size: int = 32,
+    normalize_vectors: bool = True,
+) -> list[float]:
+    return _embed_texts(
+        [text],
+        model_name=model_name,
+        batch_size=batch_size,
+        normalize_vectors=normalize_vectors,
+    )[0]
 
 
-def embed_chunks(chunks: list[CodeChunk]) -> list[ChunkEmbedding]:
+def embed_chunks(
+    chunks: list[CodeChunk],
+    metadata: dict[str, StructuralMetadata] | None = None,
+    *,
+    model_name: str = DEFAULT_EMBEDDING_MODEL,
+    batch_size: int = 32,
+    normalize_vectors: bool = True,
+) -> list[ChunkEmbedding]:
     if not chunks:
         return []
 
+    metadata = metadata or {}
     texts = [
-        build_embedding_text(chunk, StructuralMetadata(chunk_id=chunk.id))
+        build_embedding_text(chunk, metadata.get(chunk.id) or StructuralMetadata(chunk_id=chunk.id))
         for chunk in chunks
     ]
-    vectors = _embed_texts(texts)
+    vectors = _embed_texts(
+        texts,
+        model_name=model_name,
+        batch_size=batch_size,
+        normalize_vectors=normalize_vectors,
+    )
     return [
         ChunkEmbedding(
             chunk_id=chunk.id,
-            embedding_model=DEFAULT_EMBEDDING_MODEL,
+            embedding_model=model_name,
             vector=vector,
         )
         for chunk, vector in zip(chunks, vectors, strict=True)
     ]
 
 
-def embed_query(query: str) -> list[float]:
-    return embed_text(query)
+def embed_query(
+    query: str,
+    *,
+    model_name: str = DEFAULT_EMBEDDING_MODEL,
+    batch_size: int = 32,
+    normalize_vectors: bool = True,
+) -> list[float]:
+    return embed_text(
+        query,
+        model_name=model_name,
+        batch_size=batch_size,
+        normalize_vectors=normalize_vectors,
+    )
 
 
-def _embed_texts(texts: list[str]) -> list[list[float]]:
-    model = _load_model(DEFAULT_EMBEDDING_MODEL)
+def _embed_texts(
+    texts: list[str],
+    *,
+    model_name: str = DEFAULT_EMBEDDING_MODEL,
+    batch_size: int = 32,
+    normalize_vectors: bool = True,
+) -> list[list[float]]:
+    model = _load_model(model_name)
     vectors = model.encode(  # type: ignore[attr-defined]
         texts,
-        batch_size=32,
+        batch_size=batch_size,
         convert_to_numpy=True,
-        normalize_embeddings=True,
+        normalize_embeddings=normalize_vectors,
         show_progress_bar=False,
     )
     return [vector.astype(float).tolist() for vector in vectors]
