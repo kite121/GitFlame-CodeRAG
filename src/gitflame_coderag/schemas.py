@@ -72,6 +72,23 @@ class EmbeddingConfig(ContractModel):
     batch_size: int = Field(default=32, ge=1)
 
 
+class RerankerConfig(ContractModel):
+    """Configuration for the cross-encoder reranking stage (after RRF).
+
+    ``reranker_top_k`` is the size of the RRF candidate pool fed to the reranker;
+    ``final_top_k`` is how many reranked evidence chunks are returned. Both are
+    tuned in the Sprint 2 experiment matrix.
+    """
+
+    enabled: bool = True
+    model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+    device: str = "cpu"
+    batch_size: int = Field(default=32, ge=1)
+    reranker_top_k: int = Field(default=50, ge=1)
+    final_top_k: int = Field(default=10, ge=1)
+    max_pair_chars: int = Field(default=2000, ge=1)
+
+
 class AIConfig(ContractModel):
     version: int = 1
     include: list[str] = Field(default_factory=lambda: ["**/*"])
@@ -79,6 +96,7 @@ class AIConfig(ContractModel):
     chunking: ChunkingConfig = Field(default_factory=ChunkingConfig)
     retrieval: RetrievalConfig = Field(default_factory=RetrievalConfig)
     embeddings: EmbeddingConfig = Field(default_factory=EmbeddingConfig)
+    reranker: RerankerConfig = Field(default_factory=RerankerConfig)
 
 
 class CodeChunk(ContractModel):
@@ -101,7 +119,7 @@ class CodeChunk(ContractModel):
     token_count: int = Field(default=0, ge=0)
 
     @model_validator(mode="after")
-    def validate_split_metadata(self) -> "CodeChunk":
+    def validate_split_metadata(self) -> CodeChunk:
         split_fields = (self.parent_chunk_id, self.split_index, self.split_count)
         if not any(value is not None for value in split_fields):
             return self
@@ -161,11 +179,12 @@ class RetrievalResult(ContractModel):
     chunk_id: str
     rank: int = Field(ge=1)
     score: float
-    source: Literal["bm25", "dense", "ast", "rrf"]
+    source: Literal["bm25", "dense", "ast", "rrf", "reranker"]
     bm25_score: float | None = None
     dense_score: float | None = None
     ast_score: float | None = None
     rrf_score: float | None = None
+    reranker_score: float | None = None
     evidence_reason: str | None = None
 
 
@@ -174,6 +193,7 @@ class EvidenceScores(ContractModel):
     dense: float | None = None
     ast: float | None = None
     rrf: float | None = None
+    reranker: float | None = None
 
 
 class EvidenceChunk(ContractModel):
