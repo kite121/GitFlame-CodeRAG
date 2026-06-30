@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class ContractModel(BaseModel):
@@ -55,6 +55,7 @@ class ChunkingConfig(ContractModel):
     fallback_strategy: str = "fixed_window"
     max_chunk_lines: int = Field(default=80, ge=1)
     overlap_lines: int = Field(default=10, ge=0)
+    include_metadata: bool = True
 
 
 class RetrievalConfig(ContractModel):
@@ -82,6 +83,9 @@ class AIConfig(ContractModel):
 
 class CodeChunk(ContractModel):
     id: str
+    parent_chunk_id: str | None = None
+    split_index: int | None = Field(default=None, ge=1)
+    split_count: int | None = Field(default=None, ge=1)
     repository_id: str
     file_id: str
     path: str
@@ -95,6 +99,20 @@ class CodeChunk(ContractModel):
     content: str
     content_hash: str
     token_count: int = Field(default=0, ge=0)
+
+    @model_validator(mode="after")
+    def validate_split_metadata(self) -> "CodeChunk":
+        split_fields = (self.parent_chunk_id, self.split_index, self.split_count)
+        if not any(value is not None for value in split_fields):
+            return self
+
+        if self.parent_chunk_id is None or self.split_index is None or self.split_count is None:
+            raise ValueError(
+                "parent_chunk_id, split_index, and split_count must be set together"
+            )
+        if self.split_index > self.split_count:
+            raise ValueError("split_index must be less than or equal to split_count")
+        return self
 
 
 class StructuralMetadata(ContractModel):

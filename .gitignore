@@ -1,5 +1,6 @@
 .DS_Store
 .env
+.idea/
 .venv/
 __pycache__/
 *.py[cod]
@@ -11,9 +12,7 @@ dist/
 build/
 *.egg-info/
 
-# Local datasets and model/index artifacts
-datasets/repositories/*
-!datasets/repositories/.gitkeep
+# Model/index artifacts (the synthetic repository dataset IS committed)
 artifacts/
 models/
 
