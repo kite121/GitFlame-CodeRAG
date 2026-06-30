@@ -84,10 +84,11 @@ CREATE TABLE IF NOT EXISTS chunk_search_texts (
 );
 
 CREATE TABLE IF NOT EXISTS chunk_embeddings (
-    chunk_id TEXT PRIMARY KEY REFERENCES code_chunks(id) ON DELETE CASCADE,
+    chunk_id TEXT NOT NULL REFERENCES code_chunks(id) ON DELETE CASCADE,
     embedding_model TEXT NOT NULL,
-    embedding VECTOR(768),
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    embedding VECTOR NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (chunk_id, embedding_model)
 );
 
 CREATE TABLE IF NOT EXISTS chunk_keywords (
@@ -131,5 +132,7 @@ CREATE INDEX IF NOT EXISTS idx_code_chunks_repository_id
     ON code_chunks(repository_id);
 CREATE INDEX IF NOT EXISTS idx_code_chunks_parent
     ON code_chunks(parent_chunk_id);
+CREATE INDEX IF NOT EXISTS idx_chunk_embeddings_model
+    ON chunk_embeddings(embedding_model);
 CREATE INDEX IF NOT EXISTS idx_retrieval_results_run_rank
     ON retrieval_results(retrieval_run_id, rank);

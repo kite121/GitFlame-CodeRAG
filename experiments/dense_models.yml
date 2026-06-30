@@ -1,0 +1,19 @@
+dense_models:
+  primary:
+    name: jinaai/jina-embeddings-v2-base-code
+    role: code_embedding_model
+    normalize_vectors: true
+  lightweight_baseline:
+    name: sentence-transformers/all-MiniLM-L6-v2
+    role: lightweight_baseline
+    normalize_vectors: true
+
+retrieval:
+  top_k: [5, 10, 20]
+  distance: cosine
+
+metrics:
+  - recall_at_k
+  - mrr
+  - map
+  - ndcg_at_k

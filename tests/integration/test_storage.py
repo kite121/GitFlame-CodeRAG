@@ -130,6 +130,14 @@ def test_storage_round_trip(repository: CodeRAGRepository) -> None:
             created_at=datetime(2026, 1, 2, tzinfo=UTC),
         )
     )
+    repository.save_chunk_embedding(
+        ChunkEmbedding(
+            chunk_id=chunk_id,
+            embedding_model="sentence-transformers/all-MiniLM-L6-v2",
+            vector=[0.2] * 384,
+            created_at=datetime(2026, 1, 3, tzinfo=UTC),
+        )
+    )
     repository.save_keywords(
         ChunkKeywords(
             chunk_id=chunk_id,
@@ -148,6 +156,31 @@ def test_storage_round_trip(repository: CodeRAGRepository) -> None:
     assert loaded.id == chunk_id
     assert loaded.symbol_name == "login"
     assert loaded.content == chunk.content
+
+    loaded_embeddings = repository.load_chunk_embeddings(
+        repository_id=repository_id,
+        revision=revision,
+        embedding_model="sentence-transformers/all-MiniLM-L6-v2",
+    )
+    assert len(loaded_embeddings) == 1
+    assert loaded_embeddings[0].chunk_id == chunk_id
+    assert loaded_embeddings[0].vector == pytest.approx([0.2] * 384)
+
+    index_name = repository.create_vector_index(
+        embedding_model="jinaai/jina-embeddings-v2-base-code",
+        dimensions=768,
+    )
+    assert index_name.startswith("idx_chunk_embeddings_")
+
+    dense_results = repository.search_similar_chunks(
+        [0.1] * 768,
+        embedding_model="jinaai/jina-embeddings-v2-base-code",
+        top_k=1,
+        repository_id=repository_id,
+        revision=revision,
+    )
+    assert [result.chunk_id for result in dense_results] == [chunk_id]
+    assert dense_results[0].source == "dense"
 
 
 def test_save_search_texts_do_not_overwrite_each_other(repository: CodeRAGRepository) -> None:
