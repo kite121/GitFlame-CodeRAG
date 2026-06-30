@@ -44,5 +44,16 @@ context:
     timeout_ms: 8000
     fallback: simple_file_filtering
 
+# Cross-encoder reranking stage applied after RRF (Sprint 2). All keys are optional;
+# omitted values fall back to the RerankerConfig defaults in schemas.py.
+reranker:
+  enabled: true
+  model: cross-encoder/ms-marco-MiniLM-L-6-v2  # alt (stronger, heavier): BAAI/bge-reranker-base
+  device: cpu
+  batch_size: 32
+  reranker_top_k: 50   # size of the RRF candidate pool fed to the reranker
+  final_top_k: 10      # number of final evidence chunks returned
+  max_pair_chars: 2000 # chunk content truncation for each (query, chunk) pair
+
 storage:
   recommendation_ttl_days: 30

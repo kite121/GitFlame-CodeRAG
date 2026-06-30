@@ -44,5 +44,6 @@ def parse_ai_config(raw_config: dict[str, Any]) -> AIConfig:
             "chunking": _section(raw_config, "chunking"),
             "retrieval": _section(raw_config, "retrieval"),
             "embeddings": _section(raw_config, "embeddings"),
+            "reranker": _section(raw_config, "reranker"),
         }
     )
